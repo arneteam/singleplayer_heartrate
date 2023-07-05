@@ -1,0 +1,173 @@
+{{ block styles }}
+<style>
+    #heartRateInfo {
+        display: flex;
+        justify-content: space-between;
+        margin-top: 10px;
+        font-family: Arial, sans-serif;
+        font-size: 14px;
+        color: #333;
+        border: 1px solid #ccc;
+        padding: 10px;
+    }
+    #heartRateInfo span {
+        display: inline-block;
+    }
+    #heartRateInfo span.value {
+        font-weight: bold;
+    }
+    .green {
+        color: green;
+    }
+    .red {
+        color: red;
+    }
+    .orange {
+        color: orange;
+    }
+</style>
+{{ endblock }}
+
+{{ block content }}
+<div id="chartContainer" style="height: 300px; width: 100%;"></div>
+<div id="heartRateInfo">
+    <span>Durchschnittliche Herzrate: <span class="value average-rate"></span></span>
+    <span>Median der Herzrate: <span class="value median-rate"></span></span>
+    <span>Abweichung vom Durchschnitt: <span class="value deviation deviation-rate"></span></span>
+</div>
+{{ endblock }}
+
+{{ block scripts }}
+<script src="https://canvasjs.com/assets/script/canvasjs.min.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        var startTime = new Date().getTime() / 1000; // Startzeit in Sekunden
+        var firstSecondElapsed = false; // Flag, um zu überprüfen, ob die erste Sekunde vergangen ist
+
+        setInterval(() => {
+            var currentTime = new Date().getTime() / 1000; // Aktuelle Zeit in Sekunden
+            var elapsedTime = currentTime - startTime; // Vergangene Zeit seit dem Start in Sekunden
+
+            var randomData = Math.floor(Math.random() * (140 - 50 + 1)) + 50;
+
+            if (elapsedTime >= 1 && !firstSecondElapsed) {
+                firstSecondElapsed = true;
+                resetChart();
+            }
+
+            liveSend(randomData, elapsedTime);
+        }, 1000);
+    });
+
+    var intValue;
+    var dps = []; // Array für Datenpunkte
+    var chart = new CanvasJS.Chart("chartContainer", {
+        title: {
+            text: "Heartrate Data"
+        },
+        axisY: {
+            title: "BPM", // Beschriftung der Y-Achse als BPM
+            includeZero: false // Startwert der Y-Achse nicht bei 0
+        },
+        axisX: {
+            title: "Zeit (s)" // Beschriftung der X-Achse als Zeit in Sekunden
+        },
+        data: [{
+            type: "line",
+            dataPoints: dps
+        }]
+    });
+
+    var updateInterval = 1000;
+    var dataLength = 30; // Anzahl der sichtbaren Datenpunkte im Diagramm
+
+    var totalSum = 0; // Summe der Herzfrequenzwerte
+    var averageHeartRate = 0; // Durchschnittliche Herzfrequenz
+    var medianHeartRate = 0; // Median der Herzfrequenz
+    var sortedDataPoints = []; // Array für sortierte Datenpunkte
+
+    // Funktion zum Berechnen des Medians
+
+
+    function calculateMedian() {
+        sortedDataPoints = dps.slice().sort(function (a, b) {
+            return a.y - b.y;
+        });
+        var middle = Math.floor(sortedDataPoints.length / 2);
+
+        if (sortedDataPoints.length % 2 === 0) {
+            medianHeartRate = (sortedDataPoints[middle - 1].y + sortedDataPoints[middle].y) / 2;
+        } else {
+            medianHeartRate = sortedDataPoints[middle].y;
+        }
+    }
+
+
+
+    function resetChart() {
+        dps = [];
+        totalSum = 0;
+        averageHeartRate = 0;
+        medianHeartRate = 0;
+        sortedDataPoints = [];
+        xVal = 0;
+        chart.options.data[0].dataPoints = dps;
+        chart.render();
+    }
+
+    function liveRecv(data, time) {
+        intValue = parseInt(data);
+        updateChart(intValue, time);
+    };
+    function updateChart(data, time) {
+        var yVal = data;
+        length++;
+        totalSum += yVal; // Summe aktualisieren
+        dps.push({
+            x: xVal,
+            y: yVal
+        });
+
+        if (dps.length > dataLength) {
+            //totalSum -= dps[0].y; // Den ältesten Datenpunkt von der Summe abziehen
+            dps.shift(); // Den ältesten Datenpunkt entfernen, wenn die maximale Anzahl überschritten wird
+        }
+
+
+        averageHeartRate = totalSum / (xVal + 1); // Durchschnitt berechnen
+        calculateMedian(); // Median berechnen
+
+        chart.render(); // Diagramm rendern
+
+        var deviation = yVal - averageHeartRate; // Abweichung vom Durchschnitt berechnen
+        var percentDeviation = (deviation / averageHeartRate) * 100; // Prozentsatz der Abweichung berechnen
+
+        var heartRateInfo = document.getElementById("heartRateInfo");
+        var averageRateElement = heartRateInfo.querySelector(".average-rate");
+        var medianRateElement = heartRateInfo.querySelector(".median-rate");
+        var deviationElement = heartRateInfo.querySelector(".deviation-rate");
+
+        // Farbe basierend auf dem Prozentsatz der Abweichung festlegen
+        if (Math.abs(percentDeviation) > 25) {
+            deviationElement.classList.add("red");
+            deviationElement.classList.remove("orange", "green");
+        } else if (Math.abs(percentDeviation) > 15) {
+            deviationElement.classList.add("orange");
+            deviationElement.classList.remove("red", "green");
+        } else if (Math.abs(percentDeviation) < 15) {
+            deviationElement.classList.add("green");
+            deviationElement.classList.remove("red", "orange");
+        }
+
+        averageRateElement.textContent = averageHeartRate.toFixed(2) + " BPM";
+        medianRateElement.textContent = medianHeartRate.toFixed(2) + " BPM";
+        deviationElement.textContent = deviation.toFixed(2) + " BPM (" + percentDeviation.toFixed(2) + "%)";
+
+        xVal++; // Zeit inkrementieren
+    }
+
+    updateChart(); // Initial ein Datenpunkt hinzufügen
+    //setInterval(updateChart, updateInterval); // Datenpunkte in regelmäßigen Abständen aktualisieren
+</script>
+{{ endblock }}
+
